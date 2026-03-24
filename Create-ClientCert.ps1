@@ -49,10 +49,10 @@ if (-Not (Test-Path $caCertificate))
   return
 }
 
-# Validate that fqdn is a fully qualified domain name (contains at least one dot)
-if ($Fqdn -notmatch '^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$')
+# Validate that fqdn is a valid hostname or fully qualified domain name
+if ($Fqdn -notmatch '^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$')
 {
-  Write-Error "Invalid FQDN format: $Fqdn. Must be a fully qualified domain name (e.g., server.example.com)"
+  Write-Error "Invalid FQDN format: $Fqdn. Must be a valid hostname or fully qualified domain name (e.g., server or server.example.com)"
   return
 }
 

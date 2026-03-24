@@ -68,12 +68,14 @@ function Add-DevicesToConfiguration
   
   do
   {
-    $fqdn = Read-Host "Device FQDN (e.g., device.example.com)"
+    $fqdn = Read-Host "Device FQDN or hostname (e.g., device.example.com or device)"
     if ([string]::IsNullOrWhiteSpace($fqdn)) { break }
     
     $ipInput = Read-Host "Device IP address(es) (comma-separated for multiple: 192.168.1.1,10.0.0.1)"
     # Parse IP addresses into array
     $ipAddresses = $ipInput -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+    
+    $connectionAddressInput = Read-Host "Connection address for device communication (leave blank to use '$fqdn')"
     
     $username = Read-Host "Device username"
     $password = Read-Host "Device password" -AsSecureString
@@ -82,13 +84,21 @@ function Add-DevicesToConfiguration
     
     $updateType = Read-Host "Update type (Crestron3, Crestron4, CrestronTP60Series, CrestronTP70Series, SCP, TrueNAS, UniFi)"
     
-    $devices += @{
+    $deviceEntry = @{
       FQDN       = $fqdn
       IPAddress  = $ipAddresses
       Username   = $username
       Password   = $passwordPlain
       UpdateType = $updateType
     }
+    
+    # Only include ConnectionAddress if a value was provided
+    if (-not [string]::IsNullOrWhiteSpace($connectionAddressInput))
+    {
+      $deviceEntry.ConnectionAddress = $connectionAddressInput
+    }
+    
+    $devices += $deviceEntry
     
     Write-Host "Device added.`n" -ForegroundColor Green
   } while ($true)
@@ -124,6 +134,12 @@ if (Test-Path -Path $configPath)
     if ($cert.PSObject.Properties['ApiKey'])
     {
       $certHash.ApiKey = $cert.ApiKey
+    }
+    
+    # Include ConnectionAddress if present
+    if ($cert.PSObject.Properties['ConnectionAddress'])
+    {
+      $certHash.ConnectionAddress = $cert.ConnectionAddress
     }
     
     $certificatesToManage += $certHash
@@ -628,8 +644,12 @@ function UpdateCrestronCertificate
     [string]$Username,
     [SecureString]$Password,
     [string]$Series,
-    [string]$OrgUnit
+    [string]$OrgUnit,
+    [string]$ConnectionAddress = ""
   )
+
+  # Determine the address to use for SFTP/SSH connections
+  $computerName = if ([string]::IsNullOrWhiteSpace($ConnectionAddress)) { $FQDN } else { $ConnectionAddress }
 
   Write-Host "Updating Crestron device $FQDN with certificate from $CertPath for user $Username"
 
@@ -746,16 +766,16 @@ function UpdateCrestronCertificate
   }
   else
   {
-    Write-Errror "Unsupported Crestron series: $Series"
+    Write-Error "Unsupported Crestron series: $Series"
   }
 
-  UploadFilesViaSftp -ComputerName $FQDN -Files $files -Credential $creds
+  UploadFilesViaSftp -ComputerName $computerName -Files $files -Credential $creds
 
   # Check if root CA is already installed and remove it if needed
   Write-Host "Checking for existing root CA certificates..."
   try
   {
-    $listRootResult = ExecuteSshCommand -ComputerName $FQDN -Command "certificate list root" -Credential $creds
+    $listRootResult = ExecuteSshCommand -ComputerName $computerName -Command "certificate list root" -Credential $creds
     
     if ($listRootResult)
     {
@@ -781,7 +801,7 @@ function UpdateCrestronCertificate
           Write-Host "Removing root CA with UID: $uid"
           
           $removeCommand = "certificate rem root $($OrgUnit) Private Root CA $uid"
-          ExecuteSshCommand -ComputerName $FQDN -Command $removeCommand -Credential $creds | Out-Null
+          ExecuteSshCommand -ComputerName $computerName -Command $removeCommand -Credential $creds | Out-Null
           
           Write-Host "Root CA removed successfully" -ForegroundColor Green
         }
@@ -805,7 +825,7 @@ function UpdateCrestronCertificate
   # Execute the command to install the certificate on the Crestron device
   Write-Host "Installing certificates on Crestron device..."
   
-  $commandResults = ExecuteSshCommands -ComputerName $FQDN -Command $commands -Credential $creds
+  $commandResults = ExecuteSshCommands -ComputerName $computerName -Command $commands -Credential $creds
   
   # Check if any commands failed
   $failedCommands = $commandResults | Where-Object { -not $_.Success }
@@ -1377,6 +1397,9 @@ foreach ($certEntry in $certificatesToManage)
   # Use first IP address for connections
   $ipAddress = $certEntry.IPAddress.GetType().Name -eq "String" ? $certEntry.IPAddress : $certEntry.IPAddress[0]
   
+  # Use ConnectionAddress if specified, otherwise fall back to default per-type behavior
+  $connectionAddress = if ($certEntry.ContainsKey('ConnectionAddress') -and -not [string]::IsNullOrWhiteSpace($certEntry.ConnectionAddress)) { $certEntry.ConnectionAddress } else { $null }
+  
   # Create comma-separated list of all IPs for certificate generation
     
   $username = $certEntry.Username ?? ""
@@ -1489,19 +1512,19 @@ foreach ($certEntry in $certificatesToManage)
     {
       "Crestron4"
       {
-        UpdateCrestronCertificate -CaCertPath $rootCer -CertPath $certPath -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -Series "4" -OrgUnit $config.OrgUnit
+        UpdateCrestronCertificate -CaCertPath $rootCer -CertPath $certPath -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -Series "4" -OrgUnit $config.OrgUnit -ConnectionAddress ($connectionAddress ?? "")
       }
       "Crestron3"
       {
-        UpdateCrestronCertificate -CaCertPath $rootCer -CertPath $certPath -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -Series "3" -OrgUnit $config.OrgUnit
+        UpdateCrestronCertificate -CaCertPath $rootCer -CertPath $certPath -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -Series "3" -OrgUnit $config.OrgUnit -ConnectionAddress ($connectionAddress ?? "")
       }
       "CrestronTP70Series"
       {
-        UpdateCrestronCertificate -CaCertPath $rootCer -CertPath $certPath -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -Series "TP70" -OrgUnit $config.OrgUnit
+        UpdateCrestronCertificate -CaCertPath $rootCer -CertPath $certPath -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -Series "TP70" -OrgUnit $config.OrgUnit -ConnectionAddress ($connectionAddress ?? "")
       }
       "CrestronTP60Series"
       {
-        UpdateCrestronCertificate -CaCertPath $rootCer -CertPath $certPath -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -Series "TP60" -OrgUnit $config.OrgUnit
+        UpdateCrestronCertificate -CaCertPath $rootCer -CertPath $certPath -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -Series "TP60" -OrgUnit $config.OrgUnit -ConnectionAddress ($connectionAddress ?? "")
       }
       "SCP"
       {
@@ -1516,13 +1539,14 @@ foreach ($certEntry in $certificatesToManage)
           }
         }
         
+        $scpAddress = $connectionAddress ?? $ipAddress
         if ($sshKeyPath)
         {
-          UploadCertsUsingScp -CaCertPath $rootCer -CertPath $certPath -CertDir $certDir -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -FileMappings $fileMappings -SshKeyPath $sshKeyPath
+          UploadCertsUsingScp -CaCertPath $rootCer -CertPath $certPath -CertDir $certDir -IPAddress $scpAddress -FQDN $fqdn -Username $username -Password $securePassword -FileMappings $fileMappings -SshKeyPath $sshKeyPath
         }
         else
         {
-          UploadCertsUsingScp -CaCertPath $rootCer -CertPath $certPath -CertDir $certDir -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -FileMappings $fileMappings
+          UploadCertsUsingScp -CaCertPath $rootCer -CertPath $certPath -CertDir $certDir -IPAddress $scpAddress -FQDN $fqdn -Username $username -Password $securePassword -FileMappings $fileMappings
         }
       }
       "TrueNAS"
@@ -1539,17 +1563,19 @@ foreach ($certEntry in $certificatesToManage)
           throw "ApiKey is required for TrueNAS UpdateType"
         }
         
-        UpdateTrueNASCertificate -CaCertPath $rootCer -CertPath $certPath -CertDir $certDir -IPAddress $ipAddress -FQDN $fqdn -ApiKey $apiKey
+        $truenasAddress = $connectionAddress ?? $ipAddress
+        UpdateTrueNASCertificate -CaCertPath $rootCer -CertPath $certPath -CertDir $certDir -IPAddress $truenasAddress -FQDN $fqdn -ApiKey $apiKey
       }
       "UniFi"
       {
+        $unifiAddress = $connectionAddress ?? $ipAddress
         if ($sshKeyPath)
         {
-          UpdateUniFiCertificate -CaCertPath $rootCer -CertPath $certPath -CertDir $certDir -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword -SshKeyPath $sshKeyPath
+          UpdateUniFiCertificate -CaCertPath $rootCer -CertPath $certPath -CertDir $certDir -IPAddress $unifiAddress -FQDN $fqdn -Username $username -Password $securePassword -SshKeyPath $sshKeyPath
         }
         else
         {
-          UpdateUniFiCertificate -CaCertPath $rootCer -CertPath $certPath -CertDir $certDir -IPAddress $ipAddress -FQDN $fqdn -Username $username -Password $securePassword
+          UpdateUniFiCertificate -CaCertPath $rootCer -CertPath $certPath -CertDir $certDir -IPAddress $unifiAddress -FQDN $fqdn -Username $username -Password $securePassword
         }
       }
       default
