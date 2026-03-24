@@ -1,0 +1,64 @@
+{
+  "Country": "US",
+  "OrgUnit": "MyOrganization",
+  "CACertificateName": "my-ca",
+  "CrestronCertPassword": "LogosRocks",
+  "CertificatesToManage": [
+    {
+      "FQDN": "device1.example.com",
+      "IPAddress": ["192.168.1.100"],
+      "Username": "admin",
+      "Password": "yourpassword",
+      "UpdateType": "Crestron4"
+    },
+    {
+      "FQDN": "device2.example.com",
+      "IPAddress": ["192.168.1.101"],
+      "Username": "admin",
+      "Password": "yourpassword",
+      "UpdateType": "Crestron3"
+    },
+    {
+      "FQDN": "linux-server.example.com",
+      "IPAddress": ["192.168.1.102"],
+      "Username": "root",
+      "Password": "yourpassword",
+      "UpdateType": "SCP",
+      "FileMappings": {
+        "PFX": "/path/to/your/application/certificate.pfx"
+      }
+    },
+    {
+      "FQDN": "linux-with-ca.example.com",
+      "IPAddress": ["192.168.1.103"],
+      "Username": "root",
+      "Password": "yourpassword",
+      "UpdateType": "SCP",
+      "FileMappings": {
+        "RootCA": "/etc/ssl/certs/custom-ca.pem",
+        "PFX": "/opt/myapp/certs/server.pfx"
+      }
+    },
+    {
+      "FQDN": "truenas.example.com",
+      "IPAddress": ["192.168.1.104"],
+      "UpdateType": "TrueNAS",
+      "ApiKey": "1-your-truenas-api-key-here"
+    },
+    {
+      "FQDN": "unifi.example.com",
+      "IPAddress": ["192.168.1.105"],
+      "Username": "root",
+      "Password": "yourpassword",
+      "UpdateType": "UniFi",
+      "SshKeyPath": null
+    },
+    {
+      "FQDN": "multi-ip-device.example.com",
+      "IPAddress": ["192.168.1.106", "10.0.0.106", "172.16.0.106"],
+      "Username": "admin",
+      "Password": "yourpassword",
+      "UpdateType": "Crestron4"
+    }
+  ]
+}
