@@ -14,6 +14,7 @@
     {
       "FQDN": "device2.example.com",
       "IPAddress": ["192.168.1.101"],
+      "ConnectionAddress": "192.168.1.101",
       "Username": "admin",
       "Password": "yourpassword",
       "UpdateType": "Crestron3"
@@ -56,6 +57,14 @@
     {
       "FQDN": "multi-ip-device.example.com",
       "IPAddress": ["192.168.1.106", "10.0.0.106", "172.16.0.106"],
+      "Username": "admin",
+      "Password": "yourpassword",
+      "UpdateType": "Crestron4"
+    },
+    {
+      "FQDN": "simple-hostname",
+      "IPAddress": ["192.168.1.107"],
+      "ConnectionAddress": "192.168.1.107",
       "Username": "admin",
       "Password": "yourpassword",
       "UpdateType": "Crestron4"
